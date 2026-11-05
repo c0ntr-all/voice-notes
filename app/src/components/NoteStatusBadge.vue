@@ -3,9 +3,9 @@
 </template>
 
 <script setup lang="ts">
-import { statusLabel, type NoteStatus } from '@/domain/note';
+import { statusLabel, type OutboxStatus } from '@/domain/note';
 
 defineProps<{
-  status: NoteStatus;
+  status: OutboxStatus;
 }>();
 </script>

@@ -3,11 +3,15 @@
 namespace App\Providers;
 
 use App\Domain\Notes\Contracts\NoteRepository;
+use App\Domain\Recordings\Contracts\RecordingRepository;
 use App\Domain\Users\Contracts\UserRepository;
 use App\Infrastructure\Persistence\EloquentNoteRepository;
+use App\Infrastructure\Persistence\EloquentRecordingRepository;
 use App\Infrastructure\Persistence\EloquentUserRepository;
 use App\Models\Note;
+use App\Models\Recording;
 use App\Policies\NotePolicy;
+use App\Policies\RecordingPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -20,12 +24,14 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(NoteRepository::class, EloquentNoteRepository::class);
+        $this->app->bind(RecordingRepository::class, EloquentRecordingRepository::class);
         $this->app->bind(UserRepository::class, EloquentUserRepository::class);
     }
 
     public function boot(): void
     {
         Gate::policy(Note::class, NotePolicy::class);
+        Gate::policy(Recording::class, RecordingPolicy::class);
 
         Password::defaults(fn () => Password::min(8)->max(255));
 

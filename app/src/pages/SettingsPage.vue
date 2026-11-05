@@ -3,41 +3,31 @@
     <div class="page-intro">
       <p class="kicker">Подключение</p>
       <h1>Настройки</h1>
-      <p>Ключи читаются из app/.env при сборке. После правки перезапустите dev-сервер.</p>
+      <p>Адрес и токен читаются из app/.env при сборке. После правки перезапустите dev-сервер.</p>
     </div>
-
-    <section class="settings-card">
-      <h2>SpeechKit</h2>
-      <dl>
-        <div>
-          <dt>Доступ</dt>
-          <dd>{{ speechKitConfigured() ? 'Ключ задан' : 'Ключ не задан' }}</dd>
-        </div>
-        <div>
-          <dt>Способ</dt>
-          <dd>{{ authMode }}</dd>
-        </div>
-        <div>
-          <dt>Каталог</dt>
-          <dd>{{ folderId || 'Не задан' }}</dd>
-        </div>
-        <div>
-          <dt>Вызов</dt>
-          <dd>{{ speechKitRecognizeUrl() }}</dd>
-        </div>
-      </dl>
-    </section>
 
     <section class="settings-card">
       <h2>Сервер</h2>
       <dl>
         <div>
-          <dt>Эндпоинт</dt>
+          <dt>Заметки</dt>
           <dd>{{ notesApiUrl || 'Не задан' }}</dd>
         </div>
         <div>
-          <dt>Запрос</dt>
-          <dd>POST JSON: client_uuid, body, recorded_at, duration_ms</dd>
+          <dt>Записи</dt>
+          <dd>{{ recordingsUrl || 'Адрес заметок должен заканчиваться на /notes' }}</dd>
+        </div>
+        <div>
+          <dt>Токен</dt>
+          <dd>{{ tokenConfigured ? 'Задан' : 'Не задан' }}</dd>
+        </div>
+        <div>
+          <dt>Отправка</dt>
+          <dd>POST WAV: client_uuid, recorded_at, duration_ms, audio</dd>
+        </div>
+        <div>
+          <dt>Список</dt>
+          <dd>GET заметок с текстом после обработки на сервере</dd>
         </div>
       </dl>
     </section>
@@ -74,20 +64,15 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
-import { computed } from 'vue';
-import { appConfig, speechKitConfigured, speechKitRecognizeUrl } from '@/domain/config';
+import { appConfig, recordingsApiUrl } from '@/domain/config';
 import { useNotesStore } from '@/stores/notes-store';
 
 const store = useNotesStore();
 const { notes, online, pendingCount, processing } = storeToRefs(store);
 
-const folderId = appConfig.folderId.trim();
 const notesApiUrl = appConfig.notesApiUrl.trim();
-const authMode = computed(() => {
-  if (appConfig.speechKitApiKey.trim()) return 'API-ключ';
-  if (appConfig.speechKitIamToken.trim()) return 'IAM-токен';
-  return 'Не выбран';
-});
+const recordingsUrl = recordingsApiUrl();
+const tokenConfigured = Boolean(appConfig.notesApiToken.trim());
 
 function sync(): void {
   void store.syncPending();

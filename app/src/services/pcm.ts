@@ -1,7 +1,6 @@
 export const SAMPLE_RATE = 16_000;
 export const MAX_RECORDING_MS = 30_000;
 export const MIN_RECORDING_MS = 400;
-export const MAX_PCM_BYTES = 1_000_000;
 
 export function mergeFloat32(chunks: Float32Array[]): Float32Array {
   const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -46,7 +45,7 @@ export function downsample(
   return result;
 }
 
-/** 16-bit signed little-endian PCM, the layout SpeechKit expects for format=lpcm. */
+/** 16-bit signed little-endian PCM at 16 kHz. The WAV upload wraps this buffer. */
 export function floatToPcm16(input: Float32Array): ArrayBuffer {
   const buffer = new ArrayBuffer(input.length * 2);
   const view = new DataView(buffer);

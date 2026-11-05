@@ -4,8 +4,13 @@
       <div class="page-intro">
         <p class="kicker">Библиотека</p>
         <h1>Заметки</h1>
-        <p>Короткая фраза становится текстом и уходит на сервер, когда появляется сеть.</p>
+        <p>
+          Текст появляется здесь, когда сервер обработает запись. Новые фразы без сети ждут в
+          очереди.
+        </p>
       </div>
+
+      <p v-if="libraryError" class="record-error" role="alert">{{ libraryError }}</p>
 
       <q-input
         v-if="notes.length > 0"
@@ -30,9 +35,21 @@
         v-else-if="notes.length === 0"
         icon="mic"
         title="Пока пусто"
-        text="Первая заметка начинается с одной фразы. Запись сохранится на устройстве, даже если сети нет."
+        :text="
+          pendingCount > 0
+            ? 'Записи уже лежат в очереди. Текст появится здесь после обработки на сервере.'
+            : 'Первая заметка начинается с одной фразы. Без сети запись подождёт на устройстве.'
+        "
       >
-        <q-btn unelevated color="accent" label="Записать" to="/record" no-caps />
+        <q-btn
+          v-if="pendingCount > 0"
+          unelevated
+          color="accent"
+          label="Открыть очередь"
+          to="/outbox"
+          no-caps
+        />
+        <q-btn v-else unelevated color="accent" label="Записать" to="/record" no-caps />
       </EmptyState>
 
       <EmptyState
@@ -65,15 +82,13 @@ import { groupNotes } from '@/domain/format';
 import { useNotesStore } from '@/stores/notes-store';
 
 const store = useNotesStore();
-const { notes, ready } = storeToRefs(store);
+const { notes, ready, libraryError, pendingCount } = storeToRefs(store);
 const query = ref<string | null>('');
 
 const groups = computed(() => {
   const needle = (query.value ?? '').trim().toLowerCase();
   const visible = needle
-    ? notes.value.filter((note) =>
-        `${note.body} ${note.error ?? ''}`.toLowerCase().includes(needle),
-      )
+    ? notes.value.filter((note) => note.body.toLowerCase().includes(needle))
     : notes.value;
 
   return groupNotes(visible);

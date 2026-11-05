@@ -24,6 +24,11 @@ class User extends Authenticatable
         return $this->hasMany(Note::class);
     }
 
+    public function recordings(): HasMany
+    {
+        return $this->hasMany(Recording::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

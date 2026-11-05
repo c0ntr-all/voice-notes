@@ -93,14 +93,8 @@ export default defineConfig((/* ctx */) => {
       // vueDevtools: true,
       // https: true,
       open: true, // opens browser window automatically
-      // Браузер не может вызвать SpeechKit и API напрямую: нет CORS.
-      // В dev запросы с тем же origin проксируются на Яндекс и на хост из QCLI_NOTES_API_URL.
+      // В dev запросы с тем же origin проксируются на хост из QCLI_NOTES_API_URL.
       proxy: {
-        '/yandex-stt': {
-          target: 'https://stt.api.cloud.yandex.net',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/yandex-stt/, ''),
-        },
         '/backend': {
           target: notesApiOrigin(),
           changeOrigin: true,

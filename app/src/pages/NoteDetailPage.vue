@@ -5,39 +5,51 @@
     </div>
 
     <EmptyState
-      v-else-if="!note"
-      icon="search_off"
-      title="Заметка не найдена"
-      text="Она могла быть удалена с этого устройства."
+      v-else-if="sent && !note"
+      icon="cloud_done"
+      title="Запись отправлена"
+      text="Текст появится в списке заметок, когда сервер её обработает."
     >
       <q-btn unelevated color="primary" label="К списку" to="/" no-caps />
     </EmptyState>
 
-    <article v-else class="note-detail">
-      <router-link class="back-link" to="/">Все заметки</router-link>
+    <EmptyState
+      v-else-if="!note && !recording"
+      icon="search_off"
+      title="Заметка не найдена"
+      text="Она могла быть удалена или ещё не обработана сервером."
+    >
+      <q-btn unelevated color="primary" label="К списку" to="/" no-caps />
+    </EmptyState>
+
+    <article v-else-if="shown" class="note-detail">
+      <router-link class="back-link" :to="recording ? '/outbox' : '/'">
+        {{ recording ? 'Очередь' : 'Все заметки' }}
+      </router-link>
       <div class="note-detail__meta">
-        <NoteStatusBadge :status="note.status" />
-        <span>{{ formatDuration(note.durationMs) }}</span>
+        <NoteStatusBadge v-if="recording" :status="recording.status" />
+        <span>{{ formatDuration(shown.durationMs) }}</span>
       </div>
-      <h1>{{ note.body || 'Без текста' }}</h1>
+      <h1>{{ note?.body || 'Запись без текста' }}</h1>
       <p class="note-detail__time">
-        <time :datetime="note.recordedAt">{{ formatRecordedAt(note.recordedAt) }}</time>
+        <time :datetime="shown.recordedAt">{{ formatRecordedAt(shown.recordedAt) }}</time>
       </p>
-      <p v-if="note.error" class="record-error" role="alert">{{ note.error }}</p>
+      <p v-if="recording?.error" class="record-error" role="alert">{{ recording.error }}</p>
 
       <audio v-if="audioUrl" class="note-player" :src="audioUrl" controls />
 
       <div class="note-actions">
         <q-btn
-          v-if="note.status !== 'synced'"
+          v-if="recording"
           unelevated
           color="accent"
           no-caps
           label="Отправить снова"
-          :loading="processing"
+          :loading="recording.status === 'uploading'"
+          :disable="!online"
           @click="retry"
         />
-        <q-btn v-if="note.body" outline color="primary" no-caps label="Скопировать" @click="copy" />
+        <q-btn v-if="note" outline color="primary" no-caps label="Скопировать" @click="copy" />
         <q-btn flat color="negative" no-caps label="Удалить" @click="remove" />
       </div>
     </article>
@@ -52,27 +64,31 @@ import { useRoute, useRouter } from 'vue-router';
 import EmptyState from '@/components/EmptyState.vue';
 import NoteStatusBadge from '@/components/NoteStatusBadge.vue';
 import { formatDuration, formatRecordedAt } from '@/domain/format';
+import { errorMessage } from '@/services/errors';
 import { useNotesStore } from '@/stores/notes-store';
 
 const route = useRoute();
 const router = useRouter();
 const quasar = useQuasar();
 const store = useNotesStore();
-const { notes, ready, processing } = storeToRefs(store);
+const { notes, outbox, deliveredIds, ready, online } = storeToRefs(store);
 const audioUrl = ref('');
 
 const note = computed(() => notes.value.find((item) => item.id === noteId()));
+const recording = computed(() => outbox.value.find((item) => item.id === noteId()));
+const shown = computed(() => note.value ?? recording.value ?? null);
+const sent = computed(() => deliveredIds.value.includes(noteId()));
 
-watch(note, () => void loadAudio(), { immediate: true });
+watch(recording, () => void loadAudio(), { immediate: true });
 onBeforeUnmount(revokeAudio);
 
 async function loadAudio(): Promise<void> {
   revokeAudio();
-  const current = note.value;
-  if (!current?.hasAudio) return;
+  const current = recording.value;
+  if (!current) return;
 
   const wav = await store.playback(current.id);
-  if (!wav || note.value?.id !== current.id) return;
+  if (!wav || recording.value?.id !== current.id) return;
   audioUrl.value = URL.createObjectURL(wav);
 }
 
@@ -83,7 +99,7 @@ function revokeAudio(): void {
 }
 
 async function retry(): Promise<void> {
-  const current = note.value;
+  const current = recording.value;
   if (!current) return;
   await store.retry(current.id);
 }
@@ -100,19 +116,30 @@ async function copy(): Promise<void> {
 }
 
 function remove(): void {
-  const current = note.value;
-  if (!current) return;
+  const currentNote = note.value;
+  const currentRecording = recording.value;
+  if (!currentNote && !currentRecording) return;
 
   quasar
     .dialog({
-      title: 'Удалить заметку?',
-      message: 'Текст и запись пропадут с этого устройства.',
+      title: currentRecording ? 'Удалить запись?' : 'Удалить заметку?',
+      message: currentRecording
+        ? 'Файл пропадёт с устройства и не отправится на сервер.'
+        : 'Текст пропадёт на сервере и на этом устройстве.',
       cancel: { label: 'Оставить', flat: true, noCaps: true },
       ok: { label: 'Удалить', color: 'negative', unelevated: true, noCaps: true },
       persistent: true,
     })
     .onOk(() => {
-      void store.remove(current.id).then(() => router.push('/'));
+      const action = currentRecording
+        ? store.removeRecording(currentRecording.id)
+        : store.removeNote(currentNote!.id);
+
+      void action
+        .then(() => router.push(currentRecording ? '/outbox' : '/'))
+        .catch((cause: unknown) => {
+          quasar.notify({ message: errorMessage(cause), color: 'negative' });
+        });
     });
 }
 

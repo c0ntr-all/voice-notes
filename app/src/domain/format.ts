@@ -1,4 +1,6 @@
-import type { Note } from '@/domain/note';
+interface Dated {
+  recordedAt: string;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,8 +41,8 @@ export function dayLabel(iso: string): string {
   }).format(date);
 }
 
-export function groupNotes(notes: Note[]): { label: string; notes: Note[] }[] {
-  const groups = new Map<string, Note[]>();
+export function groupNotes<T extends Dated>(notes: T[]): { label: string; notes: T[] }[] {
+  const groups = new Map<string, T[]>();
 
   for (const note of notes) {
     const label = dayLabel(note.recordedAt);

@@ -229,25 +229,14 @@ body {
   font-weight: 700;
 }
 
-.status-badge--recorded {
+.status-badge--pending {
   background: #f3e6c8;
   color: #7a4e09;
 }
 
-.status-badge--transcribing,
-.status-badge--syncing {
+.status-badge--uploading {
   background: #e4ebf2;
   color: #2d4a63;
-}
-
-.status-badge--ready {
-  background: #f8e3d6;
-  color: #9a3412;
-}
-
-.status-badge--synced {
-  background: #e3f0e7;
-  color: #21583a;
 }
 
 .status-badge--failed {

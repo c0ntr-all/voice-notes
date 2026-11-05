@@ -10,7 +10,7 @@
       </div>
 
       <div class="record-timer" aria-live="polite">{{ formatDuration(elapsedMs) }}</div>
-      <p class="record-limit">Лимит SpeechKit — 30 секунд</p>
+      <p class="record-limit">До 30 секунд</p>
       <p v-if="error" class="record-error" role="alert">{{ error }}</p>
     </div>
   </q-page>
@@ -38,15 +38,14 @@ let timer = 0;
 
 const progress = computed(() => Math.min(1, elapsedMs.value / MAX_RECORDING_MS));
 const headline = computed(() => {
-  if (busy.value) return 'Распознаю и отправляю';
+  if (busy.value) return 'Сохраняю запись';
   if (recording.value) return 'Слушаю';
   return 'Скажите заметку';
 });
 const hint = computed(() => {
-  if (busy.value)
-    return 'Текст появится в заметке. Если сервер недоступен, фраза останется в очереди.';
+  if (busy.value) return 'Запись останется на устройстве, пока сервер её не примет.';
   if (recording.value) return 'Нажмите ещё раз, чтобы закончить.';
-  return 'Одна фраза — одна заметка. Без сети запись подождёт на устройстве.';
+  return 'Одна фраза — одна заметка. Без сети запись подождёт в очереди.';
 });
 
 onMounted(() => {
@@ -93,8 +92,8 @@ async function finish(): Promise<void> {
   try {
     const recorded = recorder.stop();
     elapsedMs.value = recorded.durationMs;
-    const note = await store.addRecording(recorded.pcm, recorded.durationMs);
-    await router.push(`/notes/${note.id}`);
+    const item = await store.addRecording(recorded.pcm, recorded.durationMs);
+    await router.push(`/notes/${item.id}`);
   } catch (cause) {
     error.value = errorMessage(cause);
   } finally {

@@ -1,27 +1,40 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { createNote, type Note, type NoteStatus } from '@/domain/note';
+import { createOutboxRecording, type OutboxRecording, type ServerNote } from '@/domain/note';
 import { errorMessage } from '@/services/errors';
-import { uploadNote } from '@/services/notes-api';
-import { deleteNote, getAudio, listNotes, saveAudio, saveNote } from '@/services/note-repository';
+import {
+  deleteOutbox,
+  deleteLibraryNote,
+  getAudio,
+  listLibrary,
+  listOutbox,
+  replaceLibrary,
+  saveAudio,
+  saveOutbox,
+} from '@/services/note-repository';
+import { deleteServerNote, fetchNotes, uploadRecording } from '@/services/notes-api';
 import { MIN_RECORDING_MS, pcmToWav } from '@/services/pcm';
-import { recognizeSpeech } from '@/services/speechkit';
+
+const OFFLINE_ERROR = 'Нет сети. Запись останется на устройстве.';
 
 export const useNotesStore = defineStore('notes', () => {
-  const notes = ref<Note[]>([]);
+  const notes = ref<ServerNote[]>([]);
+  const outbox = ref<OutboxRecording[]>([]);
+  const deliveredIds = ref<string[]>([]);
   const ready = ref(false);
   const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine);
   const processingCount = ref(0);
+  const libraryError = ref('');
   const inflight = new Set<string>();
   let queue: Promise<void> = Promise.resolve();
   let networkBound = false;
 
-  const pendingNotes = computed(() => notes.value.filter((note) => note.status !== 'synced'));
-  const pendingCount = computed(() => pendingNotes.value.length);
+  const pendingCount = computed(() => outbox.value.length);
   const processing = computed(() => processingCount.value > 0);
 
   async function hydrate(): Promise<void> {
-    notes.value = await listNotes();
+    outbox.value = await listOutbox();
+    notes.value = await listLibrary();
     ready.value = true;
     if (online.value) void syncPending();
   }
@@ -40,36 +53,47 @@ export const useNotesStore = defineStore('notes', () => {
     });
   }
 
-  async function addRecording(pcm: ArrayBuffer, durationMs: number): Promise<Note> {
+  async function addRecording(pcm: ArrayBuffer, durationMs: number): Promise<OutboxRecording> {
     if (durationMs < MIN_RECORDING_MS) throw new Error('Слишком короткая запись.');
 
-    const note = createNote(durationMs);
-    await saveNote(note);
-    await saveAudio(note.id, pcm);
-    notes.value = [note, ...notes.value];
-    await processNote(note.id);
-    return notes.value.find((item) => item.id === note.id) ?? note;
+    const recording = createOutboxRecording(durationMs);
+    await saveOutbox(recording);
+    await saveAudio(recording.id, pcm);
+    outbox.value = [recording, ...outbox.value];
+    void syncPending();
+    return recording;
   }
 
   function syncPending(): Promise<void> {
     queue = queue.then(async () => {
-      const ids = [...notes.value]
-        .filter((note) => note.status !== 'synced')
+      const ids = [...outbox.value]
         .sort((left, right) => left.recordedAt.localeCompare(right.recordedAt))
-        .map((note) => note.id);
+        .map((recording) => recording.id);
 
-      for (const id of ids) await processNote(id);
+      for (const id of ids) await uploadOne(id);
+      if (navigator.onLine) await refreshLibrary();
     });
 
     return queue;
   }
 
-  async function retry(id: string): Promise<void> {
-    await processNote(id);
+  function retry(id: string): Promise<void> {
+    queue = queue.then(async () => {
+      const sent = await uploadOne(id);
+      if (sent && navigator.onLine) await refreshLibrary();
+    });
+
+    return queue;
   }
 
-  async function remove(id: string): Promise<void> {
-    await deleteNote(id);
+  async function removeRecording(id: string): Promise<void> {
+    await deleteOutbox(id);
+    outbox.value = outbox.value.filter((recording) => recording.id !== id);
+  }
+
+  async function removeNote(id: string): Promise<void> {
+    await deleteServerNote(id);
+    await deleteLibraryNote(id);
     notes.value = notes.value.filter((note) => note.id !== id);
   }
 
@@ -78,87 +102,96 @@ export const useNotesStore = defineStore('notes', () => {
     return pcm ? pcmToWav(pcm) : null;
   }
 
-  async function processNote(id: string): Promise<void> {
-    const current = notes.value.find((note) => note.id === id);
-    if (!current || current.status === 'synced' || inflight.has(id)) return;
+  async function uploadOne(id: string): Promise<boolean> {
+    const current = outbox.value.find((recording) => recording.id === id);
+    if (!current || inflight.has(id)) return false;
+
     if (!navigator.onLine) {
       online.value = false;
-      await persist(id, { error: 'Нет сети. Заметка останется на устройстве.' });
-      return;
+      await persist(id, { status: 'pending', error: OFFLINE_ERROR });
+      return false;
     }
 
     inflight.add(id);
     processingCount.value += 1;
 
     try {
-      let body = current.body;
+      await persist(id, { status: 'uploading', error: null });
+      const pcm = await getAudio(id);
+      if (!pcm) throw new Error('Локальная запись не найдена.');
 
-      if (!body) {
-        const transcribing = await persist(id, { status: 'transcribing', error: null });
-        if (!transcribing) return;
-
-        try {
-          const pcm = await getAudio(id);
-          if (!pcm) throw new Error('Локальная запись не найдена.');
-          body = await recognizeSpeech(pcm);
-        } catch (error) {
-          await persist(id, offlinePatch(false, error));
-          return;
-        }
-      }
-
-      const readyNote = await persist(id, { body, status: 'ready', error: null });
-      if (!readyNote) return;
-
-      await persist(id, { status: 'syncing', error: null });
-
-      try {
-        await uploadNote({ ...readyNote, body, status: 'syncing' });
-        await persist(id, { body, status: 'synced', error: null });
-      } catch (error) {
-        await persist(id, offlinePatch(true, error));
-      }
+      const latest = outbox.value.find((recording) => recording.id === id) ?? current;
+      await uploadRecording(latest, pcm);
+      await deleteOutbox(id);
+      outbox.value = outbox.value.filter((recording) => recording.id !== id);
+      deliveredIds.value = [...deliveredIds.value, id];
+      return true;
+    } catch (error) {
+      await persist(id, failurePatch(error));
+      return false;
     } finally {
       inflight.delete(id);
       processingCount.value = Math.max(0, processingCount.value - 1);
     }
   }
 
-  async function persist(id: string, partial: Partial<Note>): Promise<Note | null> {
-    const index = notes.value.findIndex((note) => note.id === id);
-    const current = notes.value[index];
+  async function refreshLibrary(): Promise<void> {
+    if (!navigator.onLine) {
+      online.value = false;
+      return;
+    }
+
+    processingCount.value += 1;
+
+    try {
+      const fresh = await fetchNotes();
+      notes.value = fresh;
+      await replaceLibrary(fresh);
+      libraryError.value = '';
+    } catch (error) {
+      libraryError.value = errorMessage(error);
+    } finally {
+      processingCount.value = Math.max(0, processingCount.value - 1);
+    }
+  }
+
+  async function persist(
+    id: string,
+    partial: Partial<OutboxRecording>,
+  ): Promise<OutboxRecording | null> {
+    const index = outbox.value.findIndex((recording) => recording.id === id);
+    const current = outbox.value[index];
     if (!current) return null;
 
-    const next: Note = { ...current, ...partial, updatedAt: new Date().toISOString() };
-    notes.value[index] = next;
-    await saveNote(next);
+    const next: OutboxRecording = { ...current, ...partial, updatedAt: new Date().toISOString() };
+    outbox.value[index] = next;
+    await saveOutbox(next);
     return next;
   }
 
   return {
     notes,
+    outbox,
+    deliveredIds,
     ready,
     online,
     processing,
-    pendingNotes,
     pendingCount,
+    libraryError,
     hydrate,
     watchNetwork,
     addRecording,
     syncPending,
     retry,
-    remove,
+    removeRecording,
+    removeNote,
     playback,
   };
 });
 
-function offlinePatch(hasText: boolean, error: unknown): Pick<Note, 'status' | 'error'> {
-  if (!navigator.onLine) {
-    const status: NoteStatus = hasText ? 'ready' : 'recorded';
-    return { status, error: 'Нет сети. Заметка останется на устройстве.' };
-  }
-
-  return { status: hasText ? 'ready' : 'failed', error: errorMessage(error) };
+function failurePatch(error: unknown): Pick<OutboxRecording, 'status' | 'error'> {
+  if (!navigator.onLine) return { status: 'pending', error: OFFLINE_ERROR };
+  return { status: 'failed', error: errorMessage(error) };
 }
 
 if (import.meta.hot) {
