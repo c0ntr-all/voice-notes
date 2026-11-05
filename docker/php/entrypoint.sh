@@ -16,6 +16,18 @@ if [ -f artisan ]; then
         storage/logs \
         bootstrap/cache
     chmod -R a+rwX storage bootstrap/cache || true
+
+    if [ -f vendor/autoload.php ]; then
+        if [ ! -f .env ]; then
+            cp .env.example .env
+        fi
+
+        if ! grep -Eq '^APP_KEY=.+' .env; then
+            php artisan key:generate --force --no-interaction
+        fi
+
+        php artisan migrate --force --no-interaction
+    fi
 fi
 
 if [ -f public/index.php ]; then
