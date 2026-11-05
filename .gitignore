@@ -1,8 +1,8 @@
 /.idea
 /.env
 
-/backend/vendor
-/backend/.env
-/mobile/node_modules
-/mobile/.quasar
-/mobile/dist
+/server/vendor
+/server/.env
+/app/node_modules
+/app/.quasar
+/app/dist
