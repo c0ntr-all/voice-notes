@@ -1,0 +1,9 @@
+.git
+.idea
+.env
+**/.env
+**/node_modules
+**/vendor
+**/.quasar
+**/dist
+**/storage/logs
