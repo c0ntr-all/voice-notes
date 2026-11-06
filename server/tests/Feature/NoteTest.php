@@ -29,7 +29,8 @@ class NoteTest extends TestCase
         $created->assertCreated()
             ->assertJsonPath('data.client_uuid', $uuid)
             ->assertJsonPath('data.body', 'Купить молоко')
-            ->assertJsonPath('data.duration_ms', 3200);
+            ->assertJsonPath('data.duration_ms', 3200)
+            ->assertJsonPath('data.source', 'app');
 
         $this->assertTrue(
             Carbon::parse($created->json('data.recorded_at'))->equalTo('2026-11-05T18:00:00Z'),

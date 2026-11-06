@@ -9,5 +9,6 @@ final readonly class NoteData
         public string $body,
         public string $recordedAt,
         public int $durationMs,
+        public NoteSource $source,
     ) {}
 }

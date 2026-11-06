@@ -49,6 +49,7 @@ class EloquentNoteRepository implements NoteRepository
                 'body' => $data->body,
                 'recorded_at' => $data->recordedAt,
                 'duration_ms' => $data->durationMs,
+                'source' => $data->source,
             ]);
         } catch (UniqueConstraintViolationException $exception) {
             return $this->findForUser($user, $data->clientUuid) ?? throw $exception;

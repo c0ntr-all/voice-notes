@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Notes;
 
 use App\Domain\Notes\NoteData;
+use App\Domain\Notes\NoteSource;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -82,6 +83,7 @@ class StoreNoteRequest extends FormRequest
             body: $this->validated('body'),
             recordedAt: $this->validated('recorded_at'),
             durationMs: (int) $this->validated('duration_ms'),
+            source: NoteSource::App,
         );
     }
 }

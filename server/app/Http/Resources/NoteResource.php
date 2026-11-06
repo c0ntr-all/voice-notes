@@ -21,6 +21,7 @@ class NoteResource extends JsonResource
             'body' => $this->body,
             'recorded_at' => $this->recorded_at->toISOString(),
             'duration_ms' => $this->duration_ms,
+            'source' => $this->source->value,
             'created_at' => $this->created_at->toISOString(),
             'updated_at' => $this->updated_at->toISOString(),
         ];

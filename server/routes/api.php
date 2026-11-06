@@ -1,9 +1,12 @@
 <?php
 
+use App\Http\Controllers\Api\AliceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\RecordingController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('alice', [AliceController::class, 'webhook'])->name('alice.webhook');
 
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register'])
@@ -20,6 +23,7 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::post('alice/link-code', [AliceController::class, 'linkCode'])->name('alice.link-code');
     Route::get('notes', [NoteController::class, 'index'])->name('notes.index');
     Route::post('notes', [NoteController::class, 'store'])->name('notes.store');
     Route::post('recordings', [RecordingController::class, 'store'])->name('recordings.store');

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Domain\Notes\NoteSource;
 use Database\Factories\NoteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['client_uuid', 'body', 'recorded_at', 'duration_ms'])]
+#[Fillable(['client_uuid', 'body', 'recorded_at', 'duration_ms', 'source'])]
 class Note extends Model
 {
     /** @use HasFactory<NoteFactory> */
@@ -30,6 +31,7 @@ class Note extends Model
         return [
             'recorded_at' => 'datetime',
             'duration_ms' => 'integer',
+            'source' => NoteSource::class,
         ];
     }
 }
